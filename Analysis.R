@@ -18,18 +18,16 @@ yesfont_import(pattern = "lmroman*")
 options(xtable.floating = FALSE)
 options(xtable.timestamp = "")
 
-# load RW data  remove NA DOI
-retraction_df <- read_xlsx("/Users/dmitrymalkov/Desktop/R/Introductory\ Data\ Science/Retraction\ Project/Retraction_df.xlsx") %>%
+# load Retraction Wattch data, remove NA publication DOI
+retraction_df <- read_xlsx("file_name") %>%
   as.data.frame() %>% 
   filter(!is.na(OriginalPaperDOI)) %>% 
   filter(OriginalPaperDOI != "unavailable") %>%
   filter(OriginalPaperDOI != "Unavailable") %>%
   filter(OriginalPaperDOI != "unavilable")
 
-# numer of papers with DOI
+# number of unique papers with DOI
 length(unique(retraction_df$OriginalPaperDOI)) # 16095
-# there are some papers with the same DOI, but different retraction dates. 
-# It's just a handful, so not a big deal. But might be worth thinking of some solution
 retraction_df <- retraction_df %>% filter(!duplicated(OriginalPaperDOI))
 
 # collect CrossRef citations 
@@ -39,34 +37,18 @@ crossref_check <- function(x) {
   return(count)
 }
 
-length(retraction_df$OriginalPaperDOI) # 16095
+retr_citations <- lapply(X=retraction_df$OriginalPaperDOI, FUN=crossref_check) %>%
+  bind_rows() %>% 
+  dplyr::rename(retr_citations = count) 
 
-retr_citations_1 <- lapply(X=retraction_df$OriginalPaperDOI[1:5000], FUN=crossref_check)
-retr_citations_2 <- lapply(X=retraction_df$OriginalPaperDOI[5001:10000], FUN=crossref_check)
-retr_citations_3 <- lapply(X=retraction_df$OriginalPaperDOI[10001:11000], FUN=crossref_check)
-retr_citations_4 <- lapply(X=retraction_df$OriginalPaperDOI[11001:12000], FUN=crossref_check)
-retr_citations_5 <- lapply(X=retraction_df$OriginalPaperDOI[12001:13000], FUN=crossref_check)
-retr_citations_6 <- lapply(X=retraction_df$OriginalPaperDOI[13001:14000], FUN=crossref_check)
-retr_citations_7 <- lapply(X=retraction_df$OriginalPaperDOI[14001:15000], FUN=crossref_check)
-retr_citations_8 <- lapply(X=retraction_df$OriginalPaperDOI[15001:16095], FUN=crossref_check)
-
-retr_citations_full <- c(retr_citations_1,retr_citations_2,retr_citations_3,retr_citations_4,
-                         retr_citations_5,retr_citations_6,retr_citations_7,retr_citations_8) 
-retr_citations_binded <- bind_rows(retr_citations_full) %>% 
-  dplyr::rename(citation_count_full = count) 
-
-# write_csv(retr_citations_binded, "cross_ref_citations_RW")
-
-retr_citations_binded <- read_csv("/Users/dmitrymalkov/Desktop/R/Introductory\ Data\ Science/Retraction\ Project/cross_ref_citations_RW")
-
-retr_citations_binded$doi <- tolower(retr_citations_binded$doi)
+retr_citations$doi <- tolower(retr_citations$doi)
 retraction_df$OriginalPaperDOI <- tolower(retraction_df$OriginalPaperDOI)
 
-retraction_df <- merge(retraction_df, retr_citations_binded, 
+retraction_df <- merge(retraction_df, retr_citations, 
                        by.x = "OriginalPaperDOI", by.y = "doi", all.x = T) 
 
 # Coding retraction reasons into types
-# Errors no Academic Misconduct - Type 4
+# Errors, no Academic Misconduct - Type 4
 type_4 <- c("Concerns/Issues About Data","Concerns/Issues About Image",
             "Concerns/Issues About Results", "Contamination of Cell Lines/Tissues",
             "Contamination of Reagents", "Contamination of Materials \\(General\\)",
@@ -76,7 +58,7 @@ type_4 <- c("Concerns/Issues About Data","Concerns/Issues About Image",
             "Results Not Reproducible", "Unreliable Data",
             "Unreliable Image", "Unreliable Results")
 
-# No Errors no Academic Misconduct - Type 3
+# No Errors, no Academic Misconduct - Type 3
 type_3 <- c("Author Unresponsive",
             "Breach of Policy by Author", "Breach of Policy by Third Party",
             "Cites Prior Retracted Work", "Civil Proceedings",
@@ -95,7 +77,7 @@ type_3 <- c("Author Unresponsive",
             "Lack of Approval from Company/Institution", "Nonpayment of Fees/Refusal to Pay",
             "Not Presented at Conference", "Withdrawn to Publish in Different Journal")
 
-# No Errors Academic Misconduct - Type 2
+# No Errors, Academic Misconduct - Type 2
 type_2 <- c("Duplication of Article", "Duplication of Data",
             "Duplication of Text", "Duplication of Image",
             "Euphemisms for Duplication", "Euphemisms for Misconduct",
@@ -114,16 +96,16 @@ type_1 <- c("Falsification/Fabrication of Data",
             "Plagiarism of Image", "Sabotage of Materials",
             "Sabotage of Methods", "Fake Peer Review")
 
-# unknown
+# Unknown
 unknown <- c("Date of Retraction/Other Unknown","Notice - Lack of", "Notice - Limited or No Information",
              "Investigation by Company/Institution", "Investigation by Journal/Publisher", 
              "Notice - Unable to Access via current resources", "Notice - No/Limited Information",
              "Upgrade/Update of Prior Notice")
 
-# special case
+# Special case 
 special <- c("Duplication of Article", "Error by Journal/Publisher")
 
-# Classifying the whole RW data set into types in the eright sequence to avoid overlap
+# Classifying the whole RW data set into types 
 retraction_df$retraction_type_full_MY <-  NA
 retraction_df$retraction_type_full_MY <- ifelse(grepl(paste(type_3,collapse="|"),retraction_df$Reason),
                                                 "Type 3",  retraction_df$retraction_type_full_MY)
@@ -169,7 +151,7 @@ sorted_RW <- retraction_df %>% filter(!is.na(retraction_df$retraction_type_full_
 
 count(retraction_df$retraction_type_full_MY)
 
-# retraction and papr years to date format
+# retraction and publication years to date format
 retraction_df$retraction_year_MY <- format(as.Date(retraction_df$RetractionDate, format = "%d/%m/%Y"), "%Y")
 retraction_df$paper_year_MY <- format(as.Date(retraction_df$OriginalPaperDate, format = "%d/%m/%Y"), "%Y")
 
@@ -183,7 +165,7 @@ retraction_df$time_to_retraction_MY <- as.numeric(format(round(as.duration(as.Da
 ###############################
 
 # Loading coded policy sample
-coded_df <- read_xlsx("/Users/dmitrymalkov/Desktop/Dissertation/Data/checked_dataset_09_December.xlsx") %>%
+coded_df <- read_xlsx("filename") %>%
   as.data.frame()
 
 coded_df <- coded_df %>%
